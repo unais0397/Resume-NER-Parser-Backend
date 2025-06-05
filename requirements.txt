@@ -30,3 +30,6 @@ requests==2.32.3
 
 # Configuration
 PyYAML==6.0.2
+
+# Memory Monitoring
+psutil==5.9.8

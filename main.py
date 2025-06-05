@@ -6,13 +6,17 @@ import minegold
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
-from ner_model import extract_resume_entities
+from ner_model_optimized import extract_resume_entities, unload_model
 from models import db, Resume, User
 from email_service import mail
 from auth_routes import auth_bp
 from resume_routes import resume_bp
+from memory_optimizer import memory_monitor, optimize_torch_for_cpu, check_memory_limit
 import warnings
 warnings.filterwarnings('ignore')
+
+# Optimize PyTorch for memory-constrained environment
+optimize_torch_for_cpu()
 
 
 app = Flask(__name__)
@@ -63,8 +67,17 @@ def allowed_file(filename):
 
 @app.route('/minedata', methods=['POST'])
 @jwt_required()
+@memory_monitor
 def process_file():
     try:
+        # Check memory before processing
+        if check_memory_limit(450):
+            return jsonify({
+                'status': 503,
+                'message': 'Service Temporarily Unavailable',
+                'error': 'Server memory usage too high. Please try again in a moment.'
+            }), 503
+            
         if 'file' not in request.files:
             return jsonify({
                 'status': 400,
@@ -115,6 +128,9 @@ def process_file():
             
             # Extract entities using compressed NER model
             entities = extract_resume_entities(extracted_text, model_path="compressed_resume_ner_model_v2.pt")
+            
+            # Unload model to free memory after processing
+            unload_model()
             
             # Get current user
             user_id = get_jwt_identity()
